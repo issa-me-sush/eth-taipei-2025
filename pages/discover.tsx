@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import { usePrivy } from '@privy-io/react-auth';
-import Map, { Marker } from 'react-map-gl';
+import Map, { Marker, Popup } from 'react-map-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import { Scanner, IDetectedBarcode } from '@yudiel/react-qr-scanner';
 import Layout from '../components/layout/Layout';
@@ -40,6 +40,12 @@ interface Merchant {
   reviewCount?: number;
 }
 
+interface Token {
+  symbol: string;
+  icon: string;
+  color: string;
+}
+
 function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
   const R = 6371; // Radius of the earth in km
   const dLat = deg2rad(lat2 - lat1);
@@ -72,6 +78,34 @@ function DiscoverContent() {
     zoom: 13
   });
   const [showScanner, setShowScanner] = useState(false);
+  const [selectedToken, setSelectedToken] = useState<Token>({
+    symbol: 'USDC',
+    icon: '$',
+    color: '#0052FF'
+  });
+  const [showTokens, setShowTokens] = useState(false);
+  const [selectedMapMerchant, setSelectedMapMerchant] = useState<Merchant | null>(null);
+
+  const tokens: Token[] = [
+    { symbol: 'USDC', icon: '$', color: '#0052FF' },
+    { symbol: 'CBTC', icon: '₿', color: '#F7931A' },
+    { symbol: 'RBTC', icon: '₿', color: '#FF9938' },
+    { symbol: 'FLOW', icon: 'F', color: '#00EF8B' }
+  ];
+
+  const getTokenRate = (symbol: string) => {
+    switch (symbol) {
+      case 'USDC':
+        return 30; // 1 USDC = 30 NTD
+      case 'CBTC':
+      case 'RBTC':
+        return 2748918; // 1 BTC = 2,748,918 NTD
+      case 'FLOW':
+        return 12; // 1 FLOW = 12 NTD
+      default:
+        return 30;
+    }
+  };
 
   useEffect(() => {
     // Request user's location
@@ -231,7 +265,7 @@ function DiscoverContent() {
 
           {/* Currency Input */}
           <div className="bg-[#F6F6F6] rounded-2xl p-6 mb-6">
-            <h2 className="text-[17px] font-medium text-black mb-4">You sell</h2>
+            <h2 className="text-[20px] font-black text-black/60 mb-4">You sell</h2>
             <div className="flex items-center gap-4">
               <input
                 type="number"
@@ -240,15 +274,44 @@ function DiscoverContent() {
                 placeholder="0.00"
                 className="flex-1 text-[40px] font-bold bg-transparent text-black outline-none placeholder-black/40 min-w-0"
               />
-              <button className="flex items-center gap-2 text-base">
-                <div className="w-8 h-8 rounded-full bg-[#0052FF] flex items-center justify-center">
-                  <span className="text-white">$</span>
-                </div>
-                <span className="font-medium">USDC</span>
-                <svg className="w-5 h-5" viewBox="0 0 20 20" fill="currentColor">
-                  <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
-                </svg>
-              </button>
+              <div className="relative">
+                <button 
+                  className="flex items-center gap-2 text-base"
+                  onClick={() => setShowTokens(!showTokens)}
+                >
+                  <div className="w-8 h-8 rounded-full" style={{ backgroundColor: selectedToken.color }}>
+                    <span className="text-white flex items-center justify-center h-full">{selectedToken.icon}</span>
+                  </div>
+                  <span className="font-black text-black">{selectedToken.symbol}</span>
+                  <svg 
+                    className={`w-5 h-5 transition-transform ${showTokens ? 'rotate-180' : ''}`} 
+                    viewBox="0 0 20 20" 
+                    fill="black"
+                  >
+                    <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
+                  </svg>
+                </button>
+                
+                {showTokens && (
+                  <div className="absolute right-0 mt-2 w-48 bg-white rounded-xl shadow-lg py-2 z-10">
+                    {tokens.map((token) => (
+                      <button
+                        key={token.symbol}
+                        className="w-full px-4 py-2 text-left hover:bg-gray-50 flex items-center gap-2"
+                        onClick={() => {
+                          setSelectedToken(token);
+                          setShowTokens(false);
+                        }}
+                      >
+                        <div className="w-8 h-8 rounded-full flex items-center justify-center text-white" style={{ backgroundColor: token.color }}>
+                          {token.icon}
+                        </div>
+                        <span className="font-black text-black">{token.symbol}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 
@@ -269,7 +332,7 @@ function DiscoverContent() {
                   viewMode === 'history' ? 'bg-black text-white' : 'border border-black text-black'
                 }`}
               >
-                Best rate
+                Transaction history
               </button>
             </div>
             <button
@@ -285,16 +348,18 @@ function DiscoverContent() {
           {viewMode === 'list' && (
             <>
               <div className="mb-4">
-                <span className="text-black">Send a request from below list before visiting the shop. </span>
-                <span className="text-[#FF9938]">Rate refreshes every 15 sec.</span>
+                <span className="text-black">visit any of the merchants below. </span>
+                <span className="text-[#FF9938]">Rate refreshes every 60 secs.</span>
               </div>
 
               <div className="space-y-4">
                 {merchants.map((merchant) => {
                   const inputAmount = parseFloat(amount) || 0;
-                  const ntdAmount = inputAmount * 30; // 1 USDC = 30 NTD
+                  const ntdAmount = inputAmount * getTokenRate(selectedToken.symbol);
                   const commissionAmount = (ntdAmount * merchant.commissionPercent) / 100;
                   const finalAmount = ntdAmount - commissionAmount;
+                  
+                  const googleMapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(merchant.address)}`;
                   
                   return (
                     <div key={merchant._id} className="bg-white border-b border-gray-200 pb-4">
@@ -330,13 +395,25 @@ function DiscoverContent() {
                             <span className="text-black">4.5 (27)</span>
                           </div>
                         </div>
-                        <div className="text-right">
+                        <div className="text-right space-y-2">
                           <div className="text-2xl font-bold text-black">
                             {finalAmount.toLocaleString()} NTD
                           </div>
                           <div className="text-gray-500 text-sm">
                             {merchant.commissionPercent}% fees
                           </div>
+                          <a 
+                            href={googleMapsUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-black"
+                          >
+                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                            </svg>
+                          Directions
+                          </a>
                         </div>
                       </div>
                     </div>
@@ -354,17 +431,58 @@ function DiscoverContent() {
                 mapStyle="mapbox://styles/mapbox/streets-v11"
                 mapboxAccessToken={process.env.NEXT_PUBLIC_MAPBOX_TOKEN}
               >
+                {/* Current Location Marker */}
+                {userLocation && (
+                  <Marker
+                    longitude={userLocation.lng}
+                    latitude={userLocation.lat}
+                  >
+                    <div className="w-8 h-8 bg-blue-500 rounded-full border-4 border-white shadow-lg flex items-center justify-center">
+                      <div className="w-2 h-2 bg-white rounded-full" />
+                    </div>
+                  </Marker>
+                )}
+
+                {/* Merchant Markers */}
                 {merchants.map((merchant) => (
                   <Marker
                     key={merchant._id}
                     longitude={merchant.location.coordinates[0]}
                     latitude={merchant.location.coordinates[1]}
+                    onClick={e => {
+                      e.originalEvent.stopPropagation();
+                      setSelectedMapMerchant(merchant);
+                    }}
                   >
                     <div className="w-8 h-8 bg-black rounded-full flex items-center justify-center text-white cursor-pointer">
                       $
                     </div>
                   </Marker>
                 ))}
+
+                {/* Merchant Popup */}
+                {selectedMapMerchant && (
+                  <Popup
+                    longitude={selectedMapMerchant.location.coordinates[0]}
+                    latitude={selectedMapMerchant.location.coordinates[1]}
+                    anchor="bottom"
+                    onClose={() => setSelectedMapMerchant(null)}
+                    closeButton={true}
+                    closeOnClick={false}
+                  >
+                    <div className="p-2">
+                      <h3 className="font-bold text-lg">{selectedMapMerchant.brandName}</h3>
+                      <p className="text-sm text-gray-500">{selectedMapMerchant.address}</p>
+                      <div className="mt-2 text-sm">
+                        <span className="font-medium">{selectedMapMerchant.commissionPercent}% fees</span>
+                        <span className="mx-2">•</span>
+                        <span className="text-[#FF9938]">
+                          {selectedMapMerchant.transactionCount ? `${selectedMapMerchant.transactionCount}+ tx` : '50+ tx'}
+                        </span>
+                      </div>
+                    </div>
+                  </Popup>
+                )}
               </Map>
             </div>
           )}
@@ -389,14 +507,14 @@ function DiscoverContent() {
                         <p className="text-xl font-bold text-black">
                           {tx.amount.toLocaleString()} NTD
                         </p>
-                        <a 
+                        {/* <a 
                           href={`https://sepolia.etherscan.io/tx/${tx.transactionHash}`}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="text-sm text-[#0052FF] hover:underline"
                         >
                           View on Etherscan →
-                        </a>
+                        </a> */}
                       </div>
                     </div>
                   </div>
