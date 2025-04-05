@@ -63,7 +63,7 @@ function DiscoverContent() {
   const [merchants, setMerchants] = useState<Merchant[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
-  const [viewMode, setViewMode] = useState<'list' | 'history'>('list');
+  const [viewMode, setViewMode] = useState<'list' | 'history' | 'map'>('list');
   const [selectedMerchant, setSelectedMerchant] = useState<Merchant | null>(null);
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [viewState, setViewState] = useState({
@@ -238,7 +238,7 @@ function DiscoverContent() {
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
                 placeholder="0.00"
-                className="flex-1 text-[40px] font-bold bg-transparent outline-none placeholder-black/40 min-w-0"
+                className="flex-1 text-[40px] font-bold bg-transparent text-black outline-none placeholder-black/40 min-w-0"
               />
               <button className="flex items-center gap-2 text-base">
                 <div className="w-8 h-8 rounded-full bg-[#0052FF] flex items-center justify-center">
@@ -253,77 +253,123 @@ function DiscoverContent() {
           </div>
 
           {/* View Toggle */}
-          <div className="flex items-center gap-3 mb-4">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setViewMode('list')}
+                className={`px-4 py-2 rounded-full text-sm ${
+                  viewMode === 'list' ? 'bg-black text-white' : 'border border-black text-black'
+                }`}
+              >
+                Near me
+              </button>
+              <button
+                onClick={() => setViewMode('history')}
+                className={`px-4 py-2 rounded-full text-sm ${
+                  viewMode === 'history' ? 'bg-black text-white' : 'border border-black text-black'
+                }`}
+              >
+                Best rate
+              </button>
+            </div>
             <button
-              onClick={() => setViewMode('list')}
-              className={`px-4 py-2 rounded-full text-sm ${
-                viewMode === 'list' ? 'bg-black text-white' : 'border border-black text-black'
-              }`}
+              onClick={() => setViewMode(viewMode === 'list' ? 'map' : 'list')}
+              className="p-2 rounded-full bg-black text-white"
             >
-              Near me
-            </button>
-            <button
-              onClick={() => setViewMode('history')}
-              className={`px-4 py-2 rounded-full text-sm ${
-                viewMode === 'history' ? 'bg-black text-white' : 'border border-black text-black'
-              }`}
-            >
-              History
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
+              </svg>
             </button>
           </div>
 
-          {viewMode === 'list' ? (
+          {viewMode === 'list' && (
             <>
               <div className="mb-4">
                 <span className="text-black">Send a request from below list before visiting the shop. </span>
-                <span className="text-[#0052FF]">Rate refreshes every 15 sec.</span>
+                <span className="text-[#FF9938]">Rate refreshes every 15 sec.</span>
               </div>
 
               <div className="space-y-4">
-                {merchants.map((merchant) => (
-                  <div
-                    key={merchant._id}
-                    className="bg-[#F6F6F6] rounded-2xl p-6"
-                  >
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-sm text-[#6B7280]">{merchant.distance ? `${merchant.distance.toFixed(1)}km` : '0.5km'}</span>
-                      <span className="text-[#0052FF] text-sm">
-                        {merchant.transactionCount ? `${merchant.transactionCount}+ tx` : 'new'}
-                      </span>
-                    </div>
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <h3 className="font-bold text-lg text-black">{merchant.brandName}</h3>
-                        {merchant.rating ? (
+                {merchants.map((merchant) => {
+                  const inputAmount = parseFloat(amount) || 0;
+                  const ntdAmount = inputAmount * 30; // 1 USDC = 30 NTD
+                  const commissionAmount = (ntdAmount * merchant.commissionPercent) / 100;
+                  const finalAmount = ntdAmount - commissionAmount;
+                  
+                  return (
+                    <div key={merchant._id} className="bg-white border-b border-gray-200 pb-4">
+                      <div className="flex justify-between items-baseline mb-10">
+                        <div className="text-gray-500">NAME</div>
+                        <div className="text-gray-500">YOU RECEIVE</div>
+                      </div>
+                      
+                      <div className="flex items-start justify-between">
+                        <div className="space-y-1">
+                          <div className="text-[#FF9938] text-sm">
+                            {merchant.distance ? `${merchant.distance.toFixed(1)} km` : '500m'}
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xl font-bold text-black">{merchant.brandName}</span>
+                            <span className="text-[#FF9938]">
+                              {merchant.transactionCount ? `${merchant.transactionCount}+ tx` : '50+ tx'}
+                            </span>
+                          </div>
                           <div className="flex items-center gap-1">
-                            {[1, 2, 3, 4, 5].map((star) => (
+                            {[1, 2, 3, 4, 4.5].map((star, index) => (
                               <svg
-                                key={star}
-                                className={`w-4 h-4 ${star <= Math.floor(merchant.rating || 0) ? 'text-black' : 'text-black/20'}`}
-                                fill="currentColor"
+                                key={index}
+                                className="w-4 h-4 text-black"
+                                fill={index < 4 ? "currentColor" : "none"}
+                                strokeWidth={index === 4 ? "1.5" : "0"}
+                                stroke="currentColor"
                                 viewBox="0 0 20 20"
                               >
                                 <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
                               </svg>
                             ))}
-                            <span className="text-[#6B7280]">
-                              {merchant.rating} ({merchant.reviewCount || 0})
-                            </span>
+                            <span className="text-black">4.5 (27)</span>
                           </div>
-                        ) : null}
-                      </div>
-                      <div className="text-right">
-                        <p className="text-2xl font-bold text-black">
-                          {amount ? (parseFloat(amount) * 30).toLocaleString() : '0'} NTD
-                        </p>
-                        <p className="text-sm text-[#6B7280]">{merchant.commissionPercent}% fees</p>
+                        </div>
+                        <div className="text-right">
+                          <div className="text-2xl font-bold text-black">
+                            {finalAmount.toLocaleString()} NTD
+                          </div>
+                          <div className="text-gray-500 text-sm">
+                            {merchant.commissionPercent}% fees
+                          </div>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </>
-          ) : (
+          )}
+
+          {viewMode === 'map' && (
+            <div className="h-[400px] rounded-2xl overflow-hidden">
+              <Map
+                {...viewState}
+                onMove={evt => setViewState(evt.viewState)}
+                mapStyle="mapbox://styles/mapbox/streets-v11"
+                mapboxAccessToken={process.env.NEXT_PUBLIC_MAPBOX_TOKEN}
+              >
+                {merchants.map((merchant) => (
+                  <Marker
+                    key={merchant._id}
+                    longitude={merchant.location.coordinates[0]}
+                    latitude={merchant.location.coordinates[1]}
+                  >
+                    <div className="w-8 h-8 bg-black rounded-full flex items-center justify-center text-white cursor-pointer">
+                      $
+                    </div>
+                  </Marker>
+                ))}
+              </Map>
+            </div>
+          )}
+
+          {viewMode === 'history' && (
             <div className="space-y-4">
               {transactions.length === 0 ? (
                 <div className="text-center py-8 text-gray-500">
@@ -365,7 +411,7 @@ function DiscoverContent() {
               onClick={() => setShowScanner(true)}
               className="block w-full bg-[#FF9938] text-white rounded-2xl py-4 font-bold text-lg text-center cursor-pointer"
             >
-              Scan QR Code
+              Pay
             </button>
           </div>
         </div>
