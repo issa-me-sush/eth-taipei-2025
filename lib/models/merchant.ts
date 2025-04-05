@@ -19,6 +19,7 @@ export interface Merchant {
   email: string;
   reputation: number;
   successCount: number;
+  currentCashout: number;
   createdAt: Date;
   updatedAt: Date;
 }
