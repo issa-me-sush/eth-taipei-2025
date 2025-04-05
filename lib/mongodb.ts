@@ -5,7 +5,14 @@ if (!process.env.MONGODB_URI) {
 }
 
 const uri = process.env.MONGODB_URI;
-const options = {};
+const options = {
+  connectTimeoutMS: 10000, // 10 seconds
+  socketTimeoutMS: 45000,  // 45 seconds
+  serverSelectionTimeoutMS: 10000, // 10 seconds
+  maxPoolSize: 10,
+  retryWrites: true,
+  retryReads: true
+};
 
 let client;
 let clientPromise: Promise<MongoClient>;
@@ -15,7 +22,7 @@ if (process.env.NODE_ENV === 'development') {
   // is preserved across module reloads caused by HMR (Hot Module Replacement).
   let globalWithMongo = global as typeof globalThis & {
     _mongoClientPromise?: Promise<MongoClient>
-  };
+  }
 
   if (!globalWithMongo._mongoClientPromise) {
     client = new MongoClient(uri, options);
@@ -28,8 +35,6 @@ if (process.env.NODE_ENV === 'development') {
   clientPromise = client.connect();
 }
 
-export default async function connectToDatabase() {
-  const client = await clientPromise;
-  const db = client.db();
-  return { db, client };
-} 
+// Export a module-scoped MongoClient promise. By doing this in a
+// separate module, the client can be shared across functions.
+export default clientPromise; 
