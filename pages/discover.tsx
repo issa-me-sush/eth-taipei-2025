@@ -137,6 +137,7 @@ function DiscoverContent() {
       address: merchant.walletAddress,
       brandName: merchant.brandName,
       dailyLimit: merchant.dailyLimit.toString(),
+      commissionPercent: merchant.commissionPercent.toString(),
     });
     return `${baseUrl}/payment-intent?${params.toString()}`;
   };

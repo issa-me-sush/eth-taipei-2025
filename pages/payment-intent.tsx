@@ -164,9 +164,44 @@ function PaymentIntentContent() {
           weiAmount: weiAmount,
           to: address
         });
+
+        // Save transaction to database
+        try {
+          const response = await fetch('/api/transactions/create', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              merchantAddress: address,
+              merchantName: brandName,
+              amount: finalNtdAmount, // Store the final NTD amount after commission
+              userAddress: user?.wallet?.address,
+              transactionHash: tx.transactionHash,
+            }),
+          });
+
+          if (!response.ok) {
+            console.error('Failed to save transaction:', await response.text());
+          }
+        } catch (saveError) {
+          console.error('Error saving transaction:', saveError);
+          // Continue with redirect even if saving fails
+        }
         
-        // Redirect to success page
-        router.push('/payment-success');
+        // Redirect to success page with transaction details
+        router.push({
+          pathname: '/payment-success',
+          query: {
+            ethAmount,
+            ntdAmount: ntdAmount.toString(),
+            commission: commission.toString(),
+            finalNtdAmount: finalNtdAmount.toString(),
+            merchantName: brandName,
+            merchantAddress: address,
+            transactionHash: tx.transactionHash,
+          }
+        });
       } catch (txError) {
         console.error('🔥 Privy Transaction Error:', {
           error: txError,

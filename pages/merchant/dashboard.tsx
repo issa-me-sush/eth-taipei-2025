@@ -168,6 +168,7 @@ function MerchantDashboardContent() {
                     address: merchant.walletAddress,
                     brandName: merchant.brandName,
                     dailyLimit: merchant.dailyLimit.toString(),
+                    commissionPercent: merchant.commissionPercent.toString(),
                   }).toString()}`}
                   size={120}
                   level="H"
