@@ -13,6 +13,7 @@
     "@privy-io/server-auth": "^1.19.3",
     "@react-google-maps/api": "^2.20.6",
     "@types/google.maps": "^3.58.1",
+    "@yudiel/react-qr-scanner": "^2.2.1",
     "@zxing/browser": "^0.1.4",
     "html5-qrcode": "^2.3.8",
     "jsonwebtoken": "^9.0.2",

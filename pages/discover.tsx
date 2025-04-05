@@ -3,6 +3,7 @@ import { useRouter } from 'next/router';
 import { usePrivy } from '@privy-io/react-auth';
 import Map, { Marker } from 'react-map-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
+import { Scanner, IDetectedBarcode } from '@yudiel/react-qr-scanner';
 import Layout from '../components/layout/Layout';
 import ProtectedRoute from '../components/auth/ProtectedRoute';
 
@@ -70,6 +71,7 @@ function DiscoverContent() {
     longitude: 121.5654,
     zoom: 13
   });
+  const [showScanner, setShowScanner] = useState(false);
 
   useEffect(() => {
     // Request user's location
@@ -174,9 +176,53 @@ function DiscoverContent() {
     return `${baseUrl}/payment-intent?${params.toString()}`;
   };
 
+  const handleScan = (detectedCodes: IDetectedBarcode[]) => {
+    const result = detectedCodes[0]?.rawValue;
+    if (result) {
+      try {
+        const url = new URL(result);
+        // If it's our payment URL, navigate internally
+        if (url.pathname === '/payment-intent') {
+          router.push(url.toString());
+        } else {
+          // For other URLs, open in new tab
+          window.open(url.toString(), '_blank');
+        }
+        setShowScanner(false);
+      } catch (error) {
+        console.error('Invalid URL in QR code:', result);
+      }
+    }
+  };
+
+  const handleError = (error: unknown) => {
+    console.error('QR Scanner error:', error);
+  };
+
   return (
     <Layout>
       <div className="min-h-screen bg-white">
+        {showScanner && (
+          <div className="fixed inset-0 z-50 bg-black">
+            <div className="relative h-full">
+              <button
+                onClick={() => setShowScanner(false)}
+                className="absolute top-4 right-4 z-10 text-white p-2 rounded-full bg-black/50"
+              >
+                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+              <div className="h-screen">
+                <Scanner
+                  onScan={handleScan}
+                  onError={handleError}
+                />
+              </div>
+            </div>
+          </div>
+        )}
+        
         <div className="max-w-2xl mx-auto px-4 py-6">
           <h1 className="text-[32px] font-black text-black mb-2">Find a merchant</h1>
           <p className="text-black mb-6">
@@ -315,24 +361,12 @@ function DiscoverContent() {
 
           {/* Pay Button */}
           <div className="fixed bottom-6 left-4 right-4 max-w-2xl mx-auto">
-            <input
-              type="file"
-              accept="image/*"
-              capture="environment"
-              className="hidden"
-              id="qr-input"
-              onChange={(e) => {
-                if (e.target.files?.[0]) {
-                  router.push('/payment-intent?address=example&brandName=Test&dailyLimit=1000');
-                }
-              }}
-            />
-            <label
-              htmlFor="qr-input"
+            <button
+              onClick={() => setShowScanner(true)}
               className="block w-full bg-[#FF9938] text-white rounded-2xl py-4 font-bold text-lg text-center cursor-pointer"
             >
-              Pay
-            </label>
+              Scan QR Code
+            </button>
           </div>
         </div>
       </div>
