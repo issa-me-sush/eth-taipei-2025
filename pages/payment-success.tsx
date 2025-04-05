@@ -2,9 +2,11 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
 import Layout from '../components/layout/Layout';
 import { formatEther } from 'ethers/lib/utils';
+import { SUPPORTED_TOKENS } from '../lib/chains';
 
 interface TransactionDetails {
-  ethAmount: string;
+  amount: string;
+  token: string;
   ntdAmount: number;
   commission: number;
   finalNtdAmount: number;
@@ -17,35 +19,83 @@ interface TransactionDetails {
 function PaymentSuccessContent() {
   const router = useRouter();
   const [details, setDetails] = useState<TransactionDetails | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    // Get transaction details from router query
-    const {
-      ethAmount,
-      ntdAmount,
-      commission,
-      finalNtdAmount,
-      merchantName,
-      merchantAddress,
-      transactionHash,
-    } = router.query;
+    const initializeDetails = async () => {
+      console.log('🔄 Initializing payment success page with query:', router.query);
 
-    if (ethAmount) {
-      setDetails({
-        ethAmount: ethAmount as string,
-        ntdAmount: parseFloat(ntdAmount as string),
-        commission: parseFloat(commission as string),
-        finalNtdAmount: parseFloat(finalNtdAmount as string),
-        merchantName: merchantName as string,
-        merchantAddress: merchantAddress as string,
-        transactionHash: transactionHash as string,
-        timestamp: new Date().toLocaleString(),
-      });
+      const {
+        amount,
+        token = 'USDC',
+        ntdAmount,
+        commission,
+        finalNtdAmount,
+        merchantName,
+        merchantAddress,
+        transactionHash,
+      } = router.query;
+
+      if (!amount || !transactionHash) {
+        console.error('❌ Missing required parameters:', { amount, transactionHash });
+        setError('Missing transaction details');
+        setLoading(false);
+        return;
+      }
+
+      try {
+        // Get token details
+        const tokenDetails = SUPPORTED_TOKENS[token as keyof typeof SUPPORTED_TOKENS] || SUPPORTED_TOKENS.USDC;
+        console.log('💰 Token details:', {
+          token,
+          chain: tokenDetails.chain.name,
+          chainId: tokenDetails.chain.id
+        });
+
+        setDetails({
+          amount: amount as string,
+          token: token as string,
+          ntdAmount: parseFloat(ntdAmount as string),
+          commission: parseFloat(commission as string),
+          finalNtdAmount: parseFloat(finalNtdAmount as string),
+          merchantName: merchantName as string,
+          merchantAddress: merchantAddress as string,
+          transactionHash: transactionHash as string,
+          timestamp: new Date().toLocaleString(),
+        });
+
+        console.log('✅ Transaction details set successfully');
+      } catch (err) {
+        console.error('❌ Error setting transaction details:', err);
+        setError('Failed to load transaction details');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (router.isReady) {
+      initializeDetails();
     }
-  }, [router.query]);
+  }, [router.isReady, router.query]);
+
+  const getExplorerUrl = (hash: string, token: string) => {
+    const tokenDetails = SUPPORTED_TOKENS[token as keyof typeof SUPPORTED_TOKENS];
+    if (!tokenDetails) return '';
+    
+    const baseUrl = tokenDetails.chain.blockExplorers?.default?.url;
+    return baseUrl ? `${baseUrl}/tx/${hash}` : '';
+  };
 
   const downloadReceipt = () => {
     if (!details) return;
+
+    const tokenDetails = SUPPORTED_TOKENS[details.token as keyof typeof SUPPORTED_TOKENS];
+    console.log('📄 Generating receipt for:', {
+      token: details.token,
+      chain: tokenDetails?.chain.name,
+      explorer: tokenDetails?.chain.blockExplorers?.default?.name
+    });
 
     const receiptContent = `
 PAYMENT RECEIPT
@@ -55,18 +105,19 @@ Date: ${details.timestamp}
 Transaction Details:
 ------------------
 Transaction Hash: ${details.transactionHash}
+Network: ${tokenDetails?.chain.name}
 Merchant: ${details.merchantName}
 Merchant Address: ${details.merchantAddress}
 
 Payment Details:
 --------------
-Amount Sent: ${details.ethAmount} ETH
+Amount Sent: ${details.amount} ${details.token}
 NTD Equivalent: ${details.ntdAmount.toLocaleString()} NTD
 Commission (${details.commission}%): ${(details.ntdAmount - details.finalNtdAmount).toLocaleString()} NTD
 Final Amount: ${details.finalNtdAmount.toLocaleString()} NTD
 
-This receipt serves as proof of payment on the Ethereum Sepolia network.
-Transaction can be verified at: https://sepolia.etherscan.io/tx/${details.transactionHash}
+This receipt serves as proof of payment on the ${tokenDetails?.chain.name}.
+Transaction can be verified at: ${getExplorerUrl(details.transactionHash, details.token)}
     `.trim();
 
     const blob = new Blob([receiptContent], { type: 'text/plain' });
@@ -78,9 +129,10 @@ Transaction can be verified at: https://sepolia.etherscan.io/tx/${details.transa
     a.click();
     document.body.removeChild(a);
     window.URL.revokeObjectURL(url);
+    console.log('✅ Receipt downloaded successfully');
   };
 
-  if (!details) {
+  if (loading) {
     return (
       <div className="min-h-screen bg-white flex items-center justify-center">
         <div className="text-center">
@@ -90,6 +142,26 @@ Transaction can be verified at: https://sepolia.etherscan.io/tx/${details.transa
       </div>
     );
   }
+
+  if (error || !details) {
+    return (
+      <div className="min-h-screen bg-white flex items-center justify-center">
+        <div className="text-center">
+          <div className="text-red-500 mb-4">⚠️</div>
+          <p className="text-gray-600">{error || 'Failed to load transaction details'}</p>
+          <button
+            onClick={() => router.push('/discover')}
+            className="mt-4 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
+          >
+            Back to Discover
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  const tokenDetails = SUPPORTED_TOKENS[details.token as keyof typeof SUPPORTED_TOKENS];
+  const explorerUrl = getExplorerUrl(details.transactionHash, details.token);
 
   return (
     <Layout>
@@ -103,7 +175,7 @@ Transaction can be verified at: https://sepolia.etherscan.io/tx/${details.transa
               </svg>
             </div>
             <h1 className="text-[32px] font-black text-black mb-2">Payment Successful!</h1>
-            <p className="text-gray-600">Your payment has been processed successfully.</p>
+            <p className="text-gray-600">Your payment has been processed successfully on {tokenDetails?.chain.name}.</p>
           </div>
 
           {/* Transaction Details Card */}
@@ -112,7 +184,9 @@ Transaction can be verified at: https://sepolia.etherscan.io/tx/${details.transa
             <div className="space-y-3 sm:space-y-4">
               <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-1">
                 <span className="text-gray-600 text-sm sm:text-base">Amount Sent</span>
-                <span className="font-medium text-black text-base sm:text-lg">{details.ethAmount} ETH</span>
+                <span className="font-medium text-black text-base sm:text-lg">
+                  {details.amount} {details.token}
+                </span>
               </div>
               <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-1">
                 <span className="text-gray-600 text-sm sm:text-base">NTD Equivalent</span>
@@ -151,14 +225,16 @@ Transaction can be verified at: https://sepolia.etherscan.io/tx/${details.transa
             <h2 className="text-[17px] font-medium text-black mb-4">Transaction Hash</h2>
             <div className="space-y-2">
               <p className="font-mono text-xs sm:text-sm break-all text-black">{details.transactionHash}</p>
-              <a 
-                href={`https://sepolia.etherscan.io/tx/${details.transactionHash}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-[#0052FF] text-sm mt-2 inline-block hover:underline"
-              >
-                View on Etherscan →
-              </a>
+              {explorerUrl && (
+                <a 
+                  href={explorerUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[#0052FF] text-sm mt-2 inline-block hover:underline"
+                >
+                  View on {tokenDetails?.chain.blockExplorers?.default?.name} →
+                </a>
+              )}
             </div>
           </div>
 

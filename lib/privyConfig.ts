@@ -1,4 +1,5 @@
 import { PrivyClientConfig } from '@privy-io/react-auth';
+import { supportedChains } from './chains';
 
 export const privyConfig: PrivyClientConfig = {
   loginMethods: ['email', 'wallet', 'google', 'sms', 'instagram', 'twitter'],
@@ -8,19 +9,9 @@ export const privyConfig: PrivyClientConfig = {
     showWalletLoginFirst: false, // This ensures social logins are shown prominently
   },
   embeddedWallets: {
-   createOnLogin : 'users-without-wallets'
-},
-  defaultChain: {
-    id: 11155111, // Sepolia testnet
-    name: 'Sepolia',
-    nativeCurrency: {
-      name: 'Sepolia Ether',
-      symbol: 'ETH',
-      decimals: 18,
-    },
-    rpcUrls: {
-      public: { http: [`https://sepolia.gateway.tenderly.co`] },
-      default: { http: [`https://sepolia.gateway.tenderly.co`] },
-    },
+    createOnLogin: 'users-without-wallets',
+    noPromptOnSignature: false // Show signature prompts for better UX
   },
+  supportedChains,
+  defaultChain: supportedChains[0], // Sepolia remains default
 };
