@@ -1,161 +1,213 @@
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
-import { useState } from 'react';
+import { usePrivy } from '@privy-io/react-auth';
 import Map, { Marker } from 'react-map-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import Layout from '../components/layout/Layout';
 import ProtectedRoute from '../components/auth/ProtectedRoute';
 
 interface Merchant {
-  id: string;
+  _id: string;
+  name: string;
   brandName: string;
-  address: string;
-  distance: number;
-  rating: number;
-  reviewCount: number;
+  phoneNumber: string;
+  email: string;
   commissionPercent: number;
-  transactionCount?: number;
-  isNew?: boolean;
-  coordinates: {
-    latitude: number;
-    longitude: number;
+  dailyLimit: number;
+  walletAddress: string;
+  location: {
+    type: string;
+    coordinates: [number, number];
   };
+  address: string;
+  placeId: string;
+  createdAt?: string;
+  updatedAt?: string;
+  distance?: number;
+  transactionCount?: number;
+  rating?: number;
+  reviewCount?: number;
 }
 
-const MOCK_MERCHANTS: Merchant[] = [
-  {
-    id: '1',
-    brandName: 'Rouhe Pork bun',
-    address: 'Raohe St, Songshan District, Taipei City',
-    distance: 0.5,
-    rating: 4.5,
-    reviewCount: 27,
-    commissionPercent: 5,
-    transactionCount: 50,
-    coordinates: {
-      latitude: 25.0505,
-      longitude: 121.5729
-    }
-  },
-  {
-    id: '2',
-    brandName: 'Shilin sausage',
-    address: 'Shilin Night Market, Taipei City',
-    distance: 1.2,
-    rating: 4.0,
-    reviewCount: 3,
-    commissionPercent: 4.5,
-    transactionCount: 3,
-    coordinates: {
-      latitude: 25.0878,
-      longitude: 121.5240
-    }
-  },
-  {
-    id: '3',
-    brandName: '50 Lan (Rouhe)',
-    address: 'Raohe Night Market, Taipei City',
-    distance: 2,
-    rating: 0,
-    reviewCount: 0,
-    commissionPercent: 4.5,
-    isNew: true,
-    coordinates: {
-      latitude: 25.0510,
-      longitude: 121.5735
-    }
-  }
-];
+function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371; // Radius of the earth in km
+  const dLat = deg2rad(lat2 - lat1);
+  const dLon = deg2rad(lon2 - lon1);
+  const a = 
+    Math.sin(dLat/2) * Math.sin(dLat/2) +
+    Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) * 
+    Math.sin(dLon/2) * Math.sin(dLon/2); 
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)); 
+  return R * c; // Distance in km
+}
+
+function deg2rad(deg: number): number {
+  return deg * (Math.PI/180);
+}
 
 function DiscoverContent() {
   const router = useRouter();
+  const { user } = usePrivy();
   const [amount, setAmount] = useState('');
-  const [selectedCurrency, setSelectedCurrency] = useState('USDC');
+  const [merchants, setMerchants] = useState<Merchant[]>([]);
+  const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState<'list' | 'map'>('list');
+  const [selectedMerchant, setSelectedMerchant] = useState<Merchant | null>(null);
+  const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [viewState, setViewState] = useState({
     latitude: 25.0330,
     longitude: 121.5654,
     zoom: 13
   });
 
+  useEffect(() => {
+    // Request user's location
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const { latitude, longitude } = position.coords;
+          setUserLocation({ lat: latitude, lng: longitude });
+          setViewState(prev => ({
+            ...prev,
+            latitude,
+            longitude
+          }));
+        },
+        (error) => {
+          console.error('Error getting location:', error);
+        }
+      );
+    }
+  }, []);
+
+  useEffect(() => {
+    const fetchMerchants = async () => {
+      try {
+        const url = new URL('/api/merchants/all', window.location.origin);
+        if (userLocation) {
+          url.searchParams.append('lat', userLocation.lat.toString());
+          url.searchParams.append('lng', userLocation.lng.toString());
+        }
+        
+        const response = await fetch(url.toString());
+        if (!response.ok) {
+          throw new Error('Failed to fetch merchants');
+        }
+        const data = await response.json();
+        if (data.success) {
+          let merchantsWithDistance = data.merchants;
+          
+          // Calculate distances if user location is available
+          if (userLocation) {
+            merchantsWithDistance = data.merchants.map((merchant: Merchant) => ({
+              ...merchant,
+              distance: calculateDistance(
+                userLocation.lat,
+                userLocation.lng,
+                merchant.location.coordinates[1], // latitude
+                merchant.location.coordinates[0]  // longitude
+              )
+            }));
+            
+            // Sort by distance
+            merchantsWithDistance.sort((a: Merchant, b: Merchant) => 
+              (a.distance || 0) - (b.distance || 0)
+            );
+          }
+          
+          setMerchants(merchantsWithDistance);
+        }
+      } catch (error) {
+        console.error('Error fetching merchants:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchMerchants();
+  }, [userLocation]);
+
+  const handleMerchantSelect = (merchant: Merchant) => {
+    setSelectedMerchant(merchant);
+  };
+
+  const getPaymentUrl = (merchant: Merchant) => {
+    const baseUrl = window.location.origin;
+    const params = new URLSearchParams({
+      address: merchant.walletAddress,
+      brandName: merchant.brandName,
+      dailyLimit: merchant.dailyLimit.toString(),
+    });
+    return `${baseUrl}/payment-intent?${params.toString()}`;
+  };
+
   return (
     <Layout>
       <div className="min-h-screen bg-white">
         <div className="max-w-2xl mx-auto px-4 py-6">
-          {/* Header */}
-          <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-black text-black" style={{ fontFamily: 'var(--font-pixel)' }}>TaiPay</h1>
-        <svg className="w-6 h-6 text-black font-black" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
-        </svg>
-      </div>
-          <div className="flex justify-between items-center mb-6">
-            <div>
-              <h1 className="text-2xl font-black mb-1">Find a merchant</h1>
-              <p className="text-black">
-                See how much you can get by entering the amount you want to exchange below.
-              </p>
-            </div>
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
-            </svg>
-          </div>
+          <h1 className="text-[32px] font-black text-black mb-2">Find a merchant</h1>
+          <p className="text-black mb-6">
+            See how much you can get by entering the amount you want to exchange below.
+          </p>
 
           {/* Currency Input */}
-          <div className="bg-[#F5F5F5] rounded-2xl p-6 mb-6">
-            <h2 className="text-lg font-medium mb-4">You sell</h2>
+          <div className="bg-[#F6F6F6] rounded-2xl p-6 mb-6">
+            <h2 className="text-[17px] font-medium text-black mb-4">You sell</h2>
             <div className="flex items-center gap-4">
               <input
                 type="number"
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
                 placeholder="0.00"
-                className="flex-1 text-4xl font-bold bg-transparent outline-none placeholder-black/40 min-w-0"
+                className="flex-1 text-[40px] font-bold bg-transparent outline-none placeholder-black/40 min-w-0"
               />
-              <div className="flex items-center gap-2 text-base whitespace-nowrap">
-                <div className="w-6 h-6 rounded-full bg-[#0052FF] flex items-center justify-center flex-shrink-0">
-                  <span className="text-white text-xs">$</span>
+              <button className="flex items-center gap-2 text-base">
+                <div className="w-8 h-8 rounded-full bg-[#0052FF] flex items-center justify-center">
+                  <span className="text-white">$</span>
                 </div>
                 <span className="font-medium">USDC</span>
-                <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                <svg className="w-5 h-5" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
                 </svg>
-              </div>
+              </button>
             </div>
           </div>
 
           {/* View Toggle */}
-          <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center gap-3 mb-4">
             <button
               onClick={() => setViewMode('list')}
-              className={`h-10 px-6 rounded-full text-sm transition-colors ${
-                viewMode === 'list'
-                  ? 'bg-[#4ADE80] text-white'
-                  : 'bg-[#ECFDF5] text-[#4ADE80]'
+              className={`px-4 py-2 rounded-full text-sm ${
+                viewMode === 'list' ? 'bg-black text-white' : 'border border-black text-black'
               }`}
             >
               Near me
             </button>
             <button
-              onClick={() => setViewMode(viewMode === 'map' ? 'list' : 'map')}
-              className="h-10 px-6 rounded-full text-sm bg-[#ECFDF5] text-[#4ADE80] flex items-center gap-2"
+              onClick={() => setViewMode('map')}
+              className={`px-4 py-2 rounded-full text-sm ${
+                viewMode === 'map' ? 'bg-black text-white' : 'border border-black text-black'
+              }`}
             >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
-              </svg>
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              Best rate
+            </button>
+            <button
+              onClick={() => setViewMode(viewMode === 'map' ? 'list' : 'map')}
+              className="ml-auto flex items-center gap-2 text-black"
+            >
+              <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
               </svg>
             </button>
           </div>
 
           <div className="mb-4">
-            <span className="text-[#4ADE80]">Send a request from below list before visiting the shop. </span>
+            <span className="text-black">Send a request from below list before visiting the shop. </span>
             <span className="text-[#0052FF]">Rate refreshes every 15 sec.</span>
           </div>
 
           {viewMode === 'map' ? (
-            // Map View
-            <div className="bg-[#F5F5F5] rounded-2xl overflow-hidden h-[400px]">
+            <div className="bg-[#F6F6F6] rounded-2xl overflow-hidden h-[400px]">
               <Map
                 {...viewState}
                 onMove={evt => setViewState(evt.viewState)}
@@ -163,13 +215,16 @@ function DiscoverContent() {
                 mapStyle="mapbox://styles/mapbox/light-v11"
                 mapboxAccessToken={process.env.NEXT_PUBLIC_MAPBOX_TOKEN}
               >
-                {MOCK_MERCHANTS.map((merchant) => (
+                {merchants.map((merchant) => (
                   <Marker
-                    key={merchant.id}
-                    latitude={merchant.coordinates.latitude}
-                    longitude={merchant.coordinates.longitude}
+                    key={merchant._id}
+                    latitude={merchant.location.coordinates[1]}
+                    longitude={merchant.location.coordinates[0]}
                   >
-                    <div className="w-6 h-6 bg-black rounded-full flex items-center justify-center text-white text-xs">
+                    <div 
+                      className="w-8 h-8 bg-[#FF9938] rounded-full flex items-center justify-center text-white text-sm font-medium cursor-pointer"
+                      onClick={() => handleMerchantSelect(merchant)}
+                    >
                       {merchant.commissionPercent}%
                     </div>
                   </Marker>
@@ -177,65 +232,74 @@ function DiscoverContent() {
               </Map>
             </div>
           ) : (
-            // List View
             <div className="space-y-4">
-              {MOCK_MERCHANTS.map((merchant) => (
-                <button
-                  key={merchant.id}
-                  onClick={() => router.push(`/payment/${merchant.id}?amount=${amount}`)}
-                  className="w-full bg-[#F5F5F5] rounded-2xl p-6 text-left"
+              {merchants.map((merchant) => (
+                <div
+                  key={merchant._id}
+                  className="bg-[#F6F6F6] rounded-2xl p-6"
                 >
                   <div className="flex items-center justify-between mb-1">
-                    <span className="text-xs text-black/60">{merchant.distance}km</span>
-                    {merchant.isNew ? (
-                      <span className="text-[#0052FF] text-sm">new</span>
-                    ) : (
-                      <span className="text-[#0052FF] text-sm">
-                        {merchant.transactionCount}+ tx
-                      </span>
-                    )}
+                    <span className="text-sm text-[#6B7280]">{merchant.distance ? `${merchant.distance.toFixed(1)}km` : '0.5km'}</span>
+                    <span className="text-[#0052FF] text-sm">
+                      {merchant.transactionCount ? `${merchant.transactionCount}+ tx` : 'new'}
+                    </span>
                   </div>
                   <div className="flex justify-between items-start">
                     <div>
-                      <h3 className="font-bold text-lg">{merchant.brandName}</h3>
-                      {merchant.rating > 0 && (
+                      <h3 className="font-bold text-lg text-black">{merchant.brandName}</h3>
+                      {merchant.rating ? (
                         <div className="flex items-center gap-1">
                           {[1, 2, 3, 4, 5].map((star) => (
                             <svg
                               key={star}
-                              className={`w-4 h-4 ${star <= Math.floor(merchant.rating) ? 'text-black' : 'text-black/20'}`}
+                              className={`w-4 h-4 ${star <= Math.floor(merchant.rating || 0) ? 'text-black' : 'text-black/20'}`}
                               fill="currentColor"
                               viewBox="0 0 20 20"
                             >
                               <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
                             </svg>
                           ))}
-                          <span className="text-black/60">
-                            {merchant.rating} ({merchant.reviewCount})
+                          <span className="text-[#6B7280]">
+                            {merchant.rating} ({merchant.reviewCount || 0})
                           </span>
                         </div>
-                      )}
+                      ) : null}
                     </div>
                     <div className="text-right">
-                      <p className="text-2xl font-bold">
+                      <p className="text-2xl font-bold text-black">
                         {amount ? (parseFloat(amount) * 30).toLocaleString() : '0'} NTD
                       </p>
-                      <p className="text-sm text-black/60">{merchant.commissionPercent}% fees</p>
+                      <p className="text-sm text-[#6B7280]">{merchant.commissionPercent}% fees</p>
                     </div>
                   </div>
-                </button>
+                </div>
               ))}
             </div>
           )}
 
-          {/* Pay Button */}
-          <button
-            onClick={() => router.push(`/payment/${MOCK_MERCHANTS[0].id}?amount=${amount}`)}
-            className="fixed bottom-6 left-4 right-4 max-w-2xl mx-auto bg-[#4ADE80] text-white rounded-2xl py-4 font-bold"
-            style={{ width: 'calc(100% - 2rem)' }}
-          >
-            Pay
-          </button>
+          {/* Pay Button with hidden input */}
+          <div className="fixed bottom-6 left-4 right-4 max-w-2xl mx-auto">
+            <input
+              type="file"
+              accept="image/*"
+              capture="environment"
+              className="hidden"
+              id="qr-input"
+              onChange={(e) => {
+                if (e.target.files?.[0]) {
+                  // Here you would handle the QR code image
+                  // For now, we'll just simulate opening a payment intent
+                  router.push('/payment-intent?address=example&brandName=Test&dailyLimit=1000');
+                }
+              }}
+            />
+            <label
+              htmlFor="qr-input"
+              className="block w-full bg-[#FF9938] text-white rounded-2xl py-4 font-bold text-lg text-center cursor-pointer"
+            >
+              Pay
+            </label>
+          </div>
         </div>
       </div>
     </Layout>

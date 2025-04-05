@@ -127,11 +127,11 @@ function MerchantDashboardContent() {
   return (
     <div className="min-h-screen bg-white">
       <div className="flex justify-between items-center px-4 py-3 border-b">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 text-black">
           <div className="font-bold text-xl">CashMe</div>
           <div className="text-[#6B7280] text-base">{merchant.brandName}</div>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 text-black">
           <button className="p-2">
             <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
@@ -147,7 +147,7 @@ function MerchantDashboardContent() {
       </div>
 
       <div className="max-w-lg mx-auto px-4 py-6">
-        <h1 className="text-[32px] font-black mb-6">Profile</h1>
+        <h1 className="text-[32px] font-black  text-black mb-6">Profile</h1>
 
         <div className="relative mb-6">
           <div className="aspect-w-16 aspect-h-9 rounded-2xl overflow-hidden">
@@ -164,7 +164,11 @@ function MerchantDashboardContent() {
             <div className="bg-white p-4 rounded-2xl shadow-lg">
               <div className="mb-2">
                 <QRCodeSVG
-                  value={merchant.walletAddress}
+                  value={`${window.location.origin}/payment-intent?${new URLSearchParams({
+                    address: merchant.walletAddress,
+                    brandName: merchant.brandName,
+                    dailyLimit: merchant.dailyLimit.toString(),
+                  }).toString()}`}
                   size={120}
                   level="H"
                   includeMargin={false}

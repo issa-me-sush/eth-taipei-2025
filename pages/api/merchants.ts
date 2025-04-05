@@ -2,6 +2,10 @@ import { NextApiRequest, NextApiResponse } from 'next';
 import dbConnect from '@/lib/dbConnect';
 import Merchant from '@/models/Merchant';
 
+interface MongoError extends Error {
+  code?: number;
+}
+
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
@@ -12,28 +16,22 @@ export default async function handler(
 
   try {
     await dbConnect();
-    
-    // Create merchant
     const merchant = await Merchant.create(req.body);
+    return res.status(201).json({ success: true, merchant });
+  } catch (error) {
+    console.error('Error creating merchant:', error);
     
-    return res.status(201).json({
-      success: true,
-      merchant
-    });
-  } catch (error: any) {
-    console.error('Error registering merchant:', error);
-    
-    // Handle duplicate key error
-    if (error.code === 11000) {
+    // Check if it's a MongoDB duplicate key error
+    if ((error as MongoError).code === 11000) {
       return res.status(400).json({ 
-        success: false,
         message: 'A merchant with this wallet address already exists' 
       });
     }
 
     return res.status(500).json({ 
       success: false,
-      message: error.message || 'Failed to register merchant'
+      message: 'Error creating merchant',
+      error: error instanceof Error ? error.message : 'Unknown error'
     });
   }
 } 
