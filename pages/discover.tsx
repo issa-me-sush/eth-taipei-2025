@@ -6,6 +6,16 @@ import 'mapbox-gl/dist/mapbox-gl.css';
 import Layout from '../components/layout/Layout';
 import ProtectedRoute from '../components/auth/ProtectedRoute';
 
+interface Transaction {
+  _id: string;
+  date: Date;
+  merchantAddress: string;
+  merchantName: string;
+  amount: number;
+  status: 'pending' | 'completed' | 'failed';
+  transactionHash: string;
+}
+
 interface Merchant {
   _id: string;
   name: string;
@@ -50,8 +60,9 @@ function DiscoverContent() {
   const { user } = usePrivy();
   const [amount, setAmount] = useState('');
   const [merchants, setMerchants] = useState<Merchant[]>([]);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
-  const [viewMode, setViewMode] = useState<'list' | 'map'>('list');
+  const [viewMode, setViewMode] = useState<'list' | 'history'>('list');
   const [selectedMerchant, setSelectedMerchant] = useState<Merchant | null>(null);
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [viewState, setViewState] = useState({
@@ -127,6 +138,27 @@ function DiscoverContent() {
     fetchMerchants();
   }, [userLocation]);
 
+  useEffect(() => {
+    const fetchTransactions = async () => {
+      if (!user?.wallet?.address) return;
+      
+      try {
+        const response = await fetch(`/api/transactions/user/${user.wallet.address}`);
+        if (!response.ok) {
+          throw new Error('Failed to fetch transactions');
+        }
+        const data = await response.json();
+        if (data.success) {
+          setTransactions(data.transactions);
+        }
+      } catch (error) {
+        console.error('Error fetching transactions:', error);
+      }
+    };
+
+    fetchTransactions();
+  }, [user?.wallet?.address]);
+
   const handleMerchantSelect = (merchant: Merchant) => {
     setSelectedMerchant(merchant);
   };
@@ -185,100 +217,103 @@ function DiscoverContent() {
               Near me
             </button>
             <button
-              onClick={() => setViewMode('map')}
+              onClick={() => setViewMode('history')}
               className={`px-4 py-2 rounded-full text-sm ${
-                viewMode === 'map' ? 'bg-black text-white' : 'border border-black text-black'
+                viewMode === 'history' ? 'bg-black text-white' : 'border border-black text-black'
               }`}
             >
-              Best rate
-            </button>
-            <button
-              onClick={() => setViewMode(viewMode === 'map' ? 'list' : 'map')}
-              className="ml-auto flex items-center gap-2 text-black"
-            >
-              <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
-              </svg>
+              History
             </button>
           </div>
 
-          <div className="mb-4">
-            <span className="text-black">Send a request from below list before visiting the shop. </span>
-            <span className="text-[#0052FF]">Rate refreshes every 15 sec.</span>
-          </div>
+          {viewMode === 'list' ? (
+            <>
+              <div className="mb-4">
+                <span className="text-black">Send a request from below list before visiting the shop. </span>
+                <span className="text-[#0052FF]">Rate refreshes every 15 sec.</span>
+              </div>
 
-          {viewMode === 'map' ? (
-            <div className="bg-[#F6F6F6] rounded-2xl overflow-hidden h-[400px]">
-              <Map
-                {...viewState}
-                onMove={evt => setViewState(evt.viewState)}
-                style={{ width: '100%', height: '100%' }}
-                mapStyle="mapbox://styles/mapbox/light-v11"
-                mapboxAccessToken={process.env.NEXT_PUBLIC_MAPBOX_TOKEN}
-              >
+              <div className="space-y-4">
                 {merchants.map((merchant) => (
-                  <Marker
+                  <div
                     key={merchant._id}
-                    latitude={merchant.location.coordinates[1]}
-                    longitude={merchant.location.coordinates[0]}
+                    className="bg-[#F6F6F6] rounded-2xl p-6"
                   >
-                    <div 
-                      className="w-8 h-8 bg-[#FF9938] rounded-full flex items-center justify-center text-white text-sm font-medium cursor-pointer"
-                      onClick={() => handleMerchantSelect(merchant)}
-                    >
-                      {merchant.commissionPercent}%
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-sm text-[#6B7280]">{merchant.distance ? `${merchant.distance.toFixed(1)}km` : '0.5km'}</span>
+                      <span className="text-[#0052FF] text-sm">
+                        {merchant.transactionCount ? `${merchant.transactionCount}+ tx` : 'new'}
+                      </span>
                     </div>
-                  </Marker>
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <h3 className="font-bold text-lg text-black">{merchant.brandName}</h3>
+                        {merchant.rating ? (
+                          <div className="flex items-center gap-1">
+                            {[1, 2, 3, 4, 5].map((star) => (
+                              <svg
+                                key={star}
+                                className={`w-4 h-4 ${star <= Math.floor(merchant.rating || 0) ? 'text-black' : 'text-black/20'}`}
+                                fill="currentColor"
+                                viewBox="0 0 20 20"
+                              >
+                                <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                              </svg>
+                            ))}
+                            <span className="text-[#6B7280]">
+                              {merchant.rating} ({merchant.reviewCount || 0})
+                            </span>
+                          </div>
+                        ) : null}
+                      </div>
+                      <div className="text-right">
+                        <p className="text-2xl font-bold text-black">
+                          {amount ? (parseFloat(amount) * 30).toLocaleString() : '0'} NTD
+                        </p>
+                        <p className="text-sm text-[#6B7280]">{merchant.commissionPercent}% fees</p>
+                      </div>
+                    </div>
+                  </div>
                 ))}
-              </Map>
-            </div>
+              </div>
+            </>
           ) : (
             <div className="space-y-4">
-              {merchants.map((merchant) => (
-                <div
-                  key={merchant._id}
-                  className="bg-[#F6F6F6] rounded-2xl p-6"
-                >
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-sm text-[#6B7280]">{merchant.distance ? `${merchant.distance.toFixed(1)}km` : '0.5km'}</span>
-                    <span className="text-[#0052FF] text-sm">
-                      {merchant.transactionCount ? `${merchant.transactionCount}+ tx` : 'new'}
-                    </span>
-                  </div>
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <h3 className="font-bold text-lg text-black">{merchant.brandName}</h3>
-                      {merchant.rating ? (
-                        <div className="flex items-center gap-1">
-                          {[1, 2, 3, 4, 5].map((star) => (
-                            <svg
-                              key={star}
-                              className={`w-4 h-4 ${star <= Math.floor(merchant.rating || 0) ? 'text-black' : 'text-black/20'}`}
-                              fill="currentColor"
-                              viewBox="0 0 20 20"
-                            >
-                              <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-                            </svg>
-                          ))}
-                          <span className="text-[#6B7280]">
-                            {merchant.rating} ({merchant.reviewCount || 0})
-                          </span>
-                        </div>
-                      ) : null}
-                    </div>
-                    <div className="text-right">
-                      <p className="text-2xl font-bold text-black">
-                        {amount ? (parseFloat(amount) * 30).toLocaleString() : '0'} NTD
-                      </p>
-                      <p className="text-sm text-[#6B7280]">{merchant.commissionPercent}% fees</p>
-                    </div>
-                  </div>
+              {transactions.length === 0 ? (
+                <div className="text-center py-8 text-gray-500">
+                  No transaction history yet
                 </div>
-              ))}
+              ) : (
+                transactions.map((tx) => (
+                  <div key={tx._id} className="bg-[#F6F6F6] rounded-2xl p-6">
+                    <div className="flex justify-between items-start mb-2">
+                      <div>
+                        <h3 className="font-bold text-lg text-black">{tx.merchantName}</h3>
+                        <p className="text-sm text-[#6B7280]">
+                          {new Date(tx.date).toLocaleDateString()} {new Date(tx.date).toLocaleTimeString()}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-xl font-bold text-black">
+                          {tx.amount.toLocaleString()} NTD
+                        </p>
+                        <a 
+                          href={`https://sepolia.etherscan.io/tx/${tx.transactionHash}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-sm text-[#0052FF] hover:underline"
+                        >
+                          View on Etherscan →
+                        </a>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
           )}
 
-          {/* Pay Button with hidden input */}
+          {/* Pay Button */}
           <div className="fixed bottom-6 left-4 right-4 max-w-2xl mx-auto">
             <input
               type="file"
@@ -288,8 +323,6 @@ function DiscoverContent() {
               id="qr-input"
               onChange={(e) => {
                 if (e.target.files?.[0]) {
-                  // Here you would handle the QR code image
-                  // For now, we'll just simulate opening a payment intent
                   router.push('/payment-intent?address=example&brandName=Test&dailyLimit=1000');
                 }
               }}
