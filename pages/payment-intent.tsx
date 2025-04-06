@@ -195,9 +195,10 @@ function PaymentIntentContent() {
           chainId: activeWallet.chainId
         });
 
-        // Save transaction
+        // Save transaction and update merchant daily limit
         try {
-          const response = await fetch('/api/transactions/create', {
+          // First save the transaction
+          const transactionResponse = await fetch('/api/transactions/create', {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -212,11 +213,28 @@ function PaymentIntentContent() {
             }),
           });
 
-          if (!response.ok) {
-            console.error('Failed to save transaction:', await response.text());
+          if (!transactionResponse.ok) {
+            console.error('Failed to save transaction:', await transactionResponse.text());
+          }
+
+          // Then update merchant's daily limit
+          const updateMerchantResponse = await fetch(`/api/merchants/${address}/update-daily-limit`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              amountUsed: ntdAmount
+            }),
+          });
+
+          if (!updateMerchantResponse.ok) {
+            console.error('Failed to update merchant daily limit:', await updateMerchantResponse.text());
+          } else {
+            console.log('✅ Merchant daily limit updated successfully');
           }
         } catch (saveError) {
-          console.error('Error saving transaction:', saveError);
+          console.error('Error saving transaction or updating daily limit:', saveError);
         }
         
         // Redirect to success
