@@ -333,11 +333,11 @@ export default function Register() {
                   const value = e.target.value.replace(/[^0-9]/g, '');
                   setFormData({ 
                     ...formData, 
-                    dailyLimit: value === '' ? '' : Number(value).toLocaleString() 
+                    dailyLimit: value 
                   });
                 }}
                 className="w-full p-4 rounded-2xl bg-[#F5F5F5] border-none text-[17px] pr-16"
-                placeholder="1,000,000"
+                placeholder="1000000"
               />
               <span className="absolute right-4 top-1/2 -translate-y-1/2 text-[17px]">NTD</span>
             </div>
