@@ -9,6 +9,7 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@privy-io/chains": "^0.0.1",
     "@privy-io/react-auth": "^1.55.0",
     "@privy-io/server-auth": "^1.19.3",
     "@react-google-maps/api": "^2.20.6",
