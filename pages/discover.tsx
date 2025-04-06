@@ -34,7 +34,7 @@ interface Merchant {
   placeId: string;
   createdAt?: string;
   updatedAt?: string;
-  distance?: number;
+  distance: number | null;
   transactionCount?: number | null;
   rating?: number;
   reviewCount?: number;
@@ -139,9 +139,35 @@ function DiscoverContent() {
           throw new Error(data.message || 'Failed to fetch merchants');
         }
 
-        // Fetch transaction counts for each merchant
+        // Calculate distances if user location is available
+        let merchantsWithData = data.merchants.map((merchant: Merchant) => {
+          let distance = null;
+          if (userLocation) {
+            distance = calculateDistance(
+              userLocation.lat,
+              userLocation.lng,
+              merchant.location.coordinates[1], // latitude
+              merchant.location.coordinates[0]  // longitude
+            );
+          }
+          return {
+            ...merchant,
+            distance
+          };
+        });
+
+        // Sort by distance if available
+        if (userLocation) {
+          merchantsWithData.sort((a: Merchant, b: Merchant) => {
+            const distA = a.distance ?? Infinity;
+            const distB = b.distance ?? Infinity;
+            return distA - distB;
+          });
+        }
+
+        // Fetch transaction counts
         const merchantsWithCounts = await Promise.all(
-          data.merchants.map(async (merchant: Merchant) => {
+          merchantsWithData.map(async (merchant: Merchant) => {
             try {
               console.log(`🔍 Fetching transaction count for merchant: ${merchant.walletAddress}`);
               const countResponse = await fetch(`/api/transactions/merchant/count?address=${merchant.walletAddress}`);
@@ -161,7 +187,7 @@ function DiscoverContent() {
           })
         );
 
-        console.log('✅ Merchants loaded with transaction counts');
+        console.log('✅ Merchants loaded with distances and transaction counts');
         setMerchants(merchantsWithCounts);
         setLoading(false);
       } catch (error) {
@@ -172,7 +198,7 @@ function DiscoverContent() {
     };
 
     fetchMerchants();
-  }, []);
+  }, [userLocation]);
 
   useEffect(() => {
     const fetchTransactions = async () => {
@@ -371,7 +397,7 @@ function DiscoverContent() {
                       <div className="flex items-start justify-between">
                         <div className="space-y-1">
                           <div className="text-[#FF9938] text-sm">
-                            {merchant.distance ? `${merchant.distance.toFixed(1)} km` : '500m'}
+                            {typeof merchant.distance === 'number' ? `${merchant.distance.toFixed(1)} km` : 'Unknown distance'}
                           </div>
                           <div className="flex items-center gap-2">
                             <span className="text-xl font-bold text-black">{merchant.brandName}</span>
@@ -471,9 +497,9 @@ function DiscoverContent() {
                     closeOnClick={false}
                   >
                     <div className="p-2">
-                      <h3 className="font-bold text-lg">{selectedMapMerchant.brandName}</h3>
+                      <h3 className="font-bold text-lg text-black">{selectedMapMerchant.brandName}</h3>
                       <p className="text-sm text-gray-500">{selectedMapMerchant.address}</p>
-                      <div className="mt-2 text-sm">
+                      <div className="mt-2 text-sm text-black">
                         <span className="font-medium">{selectedMapMerchant.commissionPercent}% fees</span>
                         <span className="mx-2">•</span>
                         <span className="text-[#FF9938]">
