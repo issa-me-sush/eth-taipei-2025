@@ -1,6 +1,4 @@
 import { ReactNode } from 'react';
-import Header from './Header';
-import BottomNav from './BottomNav';
 
 interface LayoutProps {
   children: ReactNode;
@@ -8,12 +6,10 @@ interface LayoutProps {
 
 export default function Layout({ children }: LayoutProps) {
   return (
-    <div className="min-h-screen bg-white ">
-      {/* <Header /> */}
+    <div className="min-h-screen bg-white">
       <main className="pb-16">
         {children}
       </main>
-      {/* <BottomNav /> */}
     </div>
   );
 } 

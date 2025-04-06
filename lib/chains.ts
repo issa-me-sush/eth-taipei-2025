@@ -75,7 +75,7 @@ export const SUPPORTED_TOKENS = {
     decimals: 18
   },
   RBTC: {
-    symbol: 'RBTC',
+    symbol: 'TRBTC',
     icon: '₿',
     color: '#FF9938',
     rate: 2748918, // 1 BTC = 2,748,918 NTD

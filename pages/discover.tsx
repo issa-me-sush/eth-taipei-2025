@@ -35,7 +35,7 @@ interface Merchant {
   createdAt?: string;
   updatedAt?: string;
   distance?: number;
-  transactionCount?: number;
+  transactionCount?: number | null;
   rating?: number;
   reviewCount?: number;
 }
@@ -85,6 +85,7 @@ function DiscoverContent() {
   });
   const [showTokens, setShowTokens] = useState(false);
   const [selectedMapMerchant, setSelectedMapMerchant] = useState<Merchant | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const tokens: Token[] = [
     { symbol: 'USDC', icon: '$', color: '#0052FF' },
@@ -130,49 +131,48 @@ function DiscoverContent() {
   useEffect(() => {
     const fetchMerchants = async () => {
       try {
-        const url = new URL('/api/merchants/all', window.location.origin);
-        if (userLocation) {
-          url.searchParams.append('lat', userLocation.lat.toString());
-          url.searchParams.append('lng', userLocation.lng.toString());
-        }
-        
-        const response = await fetch(url.toString());
-        if (!response.ok) {
-          throw new Error('Failed to fetch merchants');
-        }
+        console.log('🔍 Fetching merchants...');
+        const response = await fetch('/api/merchants/all');
         const data = await response.json();
-        if (data.success) {
-          let merchantsWithDistance = data.merchants;
-          
-          // Calculate distances if user location is available
-          if (userLocation) {
-            merchantsWithDistance = data.merchants.map((merchant: Merchant) => ({
-              ...merchant,
-              distance: calculateDistance(
-                userLocation.lat,
-                userLocation.lng,
-                merchant.location.coordinates[1], // latitude
-                merchant.location.coordinates[0]  // longitude
-              )
-            }));
-            
-            // Sort by distance
-            merchantsWithDistance.sort((a: Merchant, b: Merchant) => 
-              (a.distance || 0) - (b.distance || 0)
-            );
-          }
-          
-          setMerchants(merchantsWithDistance);
+
+        if (!data.success) {
+          throw new Error(data.message || 'Failed to fetch merchants');
         }
+
+        // Fetch transaction counts for each merchant
+        const merchantsWithCounts = await Promise.all(
+          data.merchants.map(async (merchant: Merchant) => {
+            try {
+              console.log(`🔍 Fetching transaction count for merchant: ${merchant.walletAddress}`);
+              const countResponse = await fetch(`/api/transactions/merchant/count?address=${merchant.walletAddress}`);
+              const countData = await countResponse.json();
+              
+              return {
+                ...merchant,
+                transactionCount: countData.success ? countData.count : null
+              };
+            } catch (error) {
+              console.error(`❌ Error fetching count for ${merchant.brandName}:`, error);
+              return {
+                ...merchant,
+                transactionCount: null
+              };
+            }
+          })
+        );
+
+        console.log('✅ Merchants loaded with transaction counts');
+        setMerchants(merchantsWithCounts);
+        setLoading(false);
       } catch (error) {
-        console.error('Error fetching merchants:', error);
-      } finally {
+        console.error('❌ Error:', error);
+        setError(error instanceof Error ? error.message : 'Failed to fetch merchants');
         setLoading(false);
       }
     };
 
     fetchMerchants();
-  }, [userLocation]);
+  }, []);
 
   useEffect(() => {
     const fetchTransactions = async () => {
@@ -376,7 +376,7 @@ function DiscoverContent() {
                           <div className="flex items-center gap-2">
                             <span className="text-xl font-bold text-black">{merchant.brandName}</span>
                             <span className="text-[#FF9938]">
-                              {merchant.transactionCount ? `${merchant.transactionCount}+ tx` : '50+ tx'}
+                              {merchant.transactionCount !== null ? `${merchant.transactionCount} tx` : ''}
                             </span>
                           </div>
                           <div className="flex items-center gap-1">
@@ -477,7 +477,7 @@ function DiscoverContent() {
                         <span className="font-medium">{selectedMapMerchant.commissionPercent}% fees</span>
                         <span className="mx-2">•</span>
                         <span className="text-[#FF9938]">
-                          {selectedMapMerchant.transactionCount ? `${selectedMapMerchant.transactionCount}+ tx` : '50+ tx'}
+                          {selectedMapMerchant.transactionCount !== null ? `${selectedMapMerchant.transactionCount}+ tx` : ''}
                         </span>
                       </div>
                     </div>
